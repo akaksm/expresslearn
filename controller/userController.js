@@ -4,7 +4,7 @@ const { ApiError } = require("../utils/apiError")
 const { asyncHandler } = require("../utils/asyncHandler")
 const { ApiResponse } = require('../utils/apiResponse')
 const crypto = require('crypto')
-const { sendEmailVerificationEmail } = require("../email/emailService")
+const { sendEmailVerificationEmail, sendForgetPasswordVerificationEmail } = require("../email/emailService")
 const { generateToken } = require("../utils/generateToken")
 
     // genereate opt using crypto
@@ -82,7 +82,7 @@ const verifyOTP = asyncHandler(async(req,res) => {
     user.otp = null // blank otp
     user.otpExpires = null // blank otp expire time
     await user.save()
-    res.status(201).json(new ApiResponse(`OTP verification successfull.`,user.isVerified))
+    return res.status(201).json(new ApiResponse(`OTP verification successfull.`,user.isVerified))
 })
 
 const resendOtp=asyncHandler(async(req, res)=>{
@@ -184,5 +184,55 @@ const passwordChange = asyncHandler(async(req,res)=>{
     return res.status(400).json(new ApiResponse(`Old password is incorrect.`))
 })
 
+const forgetPassword = asyncHandler(async(req,res)=>{
+    const {email} = req.body
+    const user = await userModel.findOne({email:email})
+    if (!user) throw new ApiError(`Something went wrong`,400)
 
-module.exports = {register,verifyOTP,resendOtp,loginUser,deleteUser,userDetails,searchUser,updateUser,passwordChange}
+    const otp = generateSecureOTP()
+    const otpExpires = Date.now()+10*60*1000
+
+    user.forgetPassword.otp=otp
+    user.forgetPassword.otpExpires=otpExpires
+
+    await user.save()
+
+    await sendForgetPasswordVerificationEmail(user)
+
+    return res.status(201).json(new ApiResponse(`Password reset OTP has been sent to your email.`,user.email))
+    
+})
+
+const verifyForgetPasswordOTP = asyncHandler(async(req,res)=>{
+    let {otp} = req.body
+    if (!otp) throw new ApiError(`Otp is required.`)
+
+    const user = await userModel.findOne({'forgetPassword.otp':otp})
+
+    if(!user) throw new ApiError(`Invalid OTP.`,400)
+
+    if(user.forgetPassword.otpExpires < Date.now()) throw new ApiError(`OTP has been expired`,400)
+
+    user.forgetPassword.isVerified = true
+    user.forgetPassword.otp = null
+    user.forgetPassword.otpExpires = null
+    await user.save()
+    return res.status(201).json(new ApiResponse(`OTP verification successfull.`,user.forgetPassword.isVerified))
+})
+
+const forgetPasswordChange = asyncHandler(async(req,res)=>{
+    const {email,password,confirmPassword} = req.body
+    if ( password !== confirmPassword) throw new ApiError(`Password does not match.`,400)
+    const user = await userModel.findOne({email:email})
+    if (!user) throw new ApiError(`Email is not registered`)
+    if (!user.forgetPassword.isVerified) throw new ApiError(`Please verify your otp first.`,400)
+
+    const salt = await bcrypt.genSalt(10)
+    const hash_password = await bcrypt.hash(password,salt)
+    user.password=hash_password
+    await user.save()
+
+    return res.status(201).json(new ApiResponse(`Password has been changed successfully.`))
+})
+
+module.exports = {register,verifyOTP,resendOtp,loginUser,deleteUser,userDetails,searchUser,updateUser,passwordChange,forgetPassword,verifyForgetPasswordOTP,forgetPasswordChange}
