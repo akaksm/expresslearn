@@ -15,8 +15,9 @@ const userRoute = require('./routes/userRoute')
 const blogRoute = require('./routes/blogRoute')
 const commentRoute = require('./routes/commentRoute')
 const categoryRoute = require('./routes/categoryRoute')
+const productRoute = require('./routes/productRoute')
+const cartRoute = require('./routes/cartRoute')
 const { notfound, errorMiddleware } = require('./middleware/errorMiddleware')
-
 
 
 
@@ -29,6 +30,7 @@ const port = process.env.PORT || 6000
 
 // middleware
 app.use(bodyParser.json())
+app.use('/api/image', express.static('./public/uploads'))
 
 
 // routes
@@ -36,6 +38,8 @@ app.use('/api',userRoute)
 app.use('/api',blogRoute)
 app.use('/api',commentRoute)
 app.use('/api',categoryRoute)
+app.use('/api',productRoute)
+app.use('/api',cartRoute)
 
 // error middleware
 app.use(notfound)
